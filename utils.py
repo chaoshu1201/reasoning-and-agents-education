@@ -90,14 +90,17 @@ def _format_message_content(message):
 
 def get_completion(system_prompt=None, user_prompt=None, messages=None, model_api_config=LLMModels.GITHUB_GPT_41_MINI.value):
     """
-    Function to get a completion from the OpenAI API.
+    Get a completion through LiteLLM.
     Args:
         system_prompt: The system prompt
         user_prompt: The user prompt
         messages: List of messages for chat-based models
         model_api_config: The model API configuration to use (default is GITHUB_GPT_41_MINI)
     Returns:
-        The completion text
+        A (text, response) tuple. Normal success returns the completion text
+        and full response object. Streaming success returns (text, None).
+        A caught exception returns ("An error occurred: ...", None).
+        A None response indicates unavailable metadata, not necessarily failure.
     """
     messages = list(messages or [])
     if system_prompt:
@@ -145,7 +148,7 @@ def get_completion(system_prompt=None, user_prompt=None, messages=None, model_ap
             content = _format_message_content(message)
             return content, response
     except Exception as e:
-        return f"An error occurred: {e}"
+        return f"An error occurred: {e}", None
 
 
 def get_n_completions(
@@ -302,3 +305,63 @@ def print_in_box(text, title="", cols=100, tab_level=0):
         + "\u2550" * (cols - 2 - tab_level * SINGLE_TAB_LEVEL)
         + "\u255d"
     )
+
+
+def _fmt_value(value):
+    return repr(value) if isinstance(value, str) else str(value)
+
+
+def _print_tree(value, indent=0, key=None):
+    pad = "  " * indent
+    label = f"{key}: " if key is not None else ""
+    if isinstance(value, dict):
+        items = {k: v for k, v in value.items() if v is not None and v != {}}
+        if not items:
+            return
+        print(f"{pad}{label}")
+        for k, v in items.items():
+            _print_tree(v, indent + 1, k)
+    elif isinstance(value, list):
+        print(f"{pad}{label}[{len(value)}]")
+        for i, v in enumerate(value):
+            _print_tree(v, indent + 1, f"[{i}]")
+    elif value is not None:
+        print(f"{pad}{label}{_fmt_value(value)}")
+
+
+def print_response(response, max_top_logprobs=5):
+    """Print a litellm ModelResponse as an indented, human-readable tree.
+
+    Token logprobs are shown as a compact table (probability and top alternatives)
+    instead of the raw nested lists with byte arrays.
+    """
+    import math
+
+    data = response.model_dump() if hasattr(response, "model_dump") else dict(response)
+    choices = data.pop("choices", [])
+    _print_tree(data)
+
+    print(f"choices: [{len(choices)}]")
+    for choice in choices:
+        logprobs = choice.pop("logprobs", None)
+        message = choice.pop("message", {})
+        content = message.pop("content", None)
+        _print_tree(choice, 1, f"[{choice.get('index', 0)}]")
+        print("    message:")
+        print(f"      role: {message.pop('role', None)!r}")
+        print("      content:")
+        for line in (content or "").splitlines() or [""]:
+            print(f"        | {line}")
+        _print_tree(message, 3)
+
+        tokens = (logprobs or {}).get("content") or []
+        if tokens:
+            print("    logprobs:")
+            for t in tokens:
+                p = math.exp(t["logprob"])
+                print(f"      {t['token']!r:<14} p={p:7.2%}  logprob={t['logprob']:.4f}")
+                alts = [a for a in t.get("top_logprobs", []) if a["token"] != t["token"]]
+                for a in alts[: max_top_logprobs - 1]:
+                    print(
+                        f"          alt {a['token']!r:<12} p={math.exp(a['logprob']):7.2%}"
+                    )
