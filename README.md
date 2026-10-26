@@ -116,15 +116,45 @@ Important: if the wrong kernel is selected, notebook cells may fail even when se
 
 ## Optional: View as Slides
 
-All lesson notebooks (with a name started with "L") can also be viewed as slides.
+All lesson notebooks (filenames beginning with `L`) can also be exported as HTML slides.
 
-Run this command from the project directory:
+The custom [slide template](templates/fullscreen_slides.html.j2) provides larger text, a centred layout that adapts to the browser window, and scrolling for long slides.
+
+Run this command from the repository root, replacing the notebook filename as needed:
 
 ```bash
-jupyter nbconvert --to slides --SlidesExporter.reveal_scroll=True <Lxx_notebook_name>.ipynb
+uv run jupyter nbconvert --to slides --SlidesExporter.reveal_scroll=True --template-file templates/fullscreen_slides.html.j2 <Lxx_notebook_name>.ipynb
 ```
 
-Then open the generated `.slides.html` file in a browser.
+This creates `<Lxx_notebook_name>.slides.html` next to the notebook. Open the generated file in a browser.
+
+The export uses the notebook's saved outputs. Run and save the notebook before exporting if you want the slides to include updated results.
+
+### L00: Export and Serve Slides with Embedded Video
+
+For L00's embedded YouTube video, view the slides through a local HTTP address rather than opening the HTML file directly with `file://`.
+
+Run this command from the repository root to export the slides and start a local server:
+
+```bash
+uv run jupyter nbconvert --to slides --no-input --SlidesExporter.reveal_scroll=True --template-file templates/fullscreen_slides.html.j2 --post serve L00_ModuleIntro.ipynb
+```
+
+The `--no-input` option hides code inputs while retaining saved outputs, including embedded videos. The `--post serve` option starts a local server and opens the slides in your browser at [http://127.0.0.1:8000/L00_ModuleIntro.slides.html](http://127.0.0.1:8000/L00_ModuleIntro.slides.html).
+
+### Serve an Existing Slides HTML File
+
+If the `.slides.html` file already exists, you can serve it without converting the notebook again. From the repository root, run:
+
+```bash
+uv run python -m http.server 8000 --bind 127.0.0.1
+```
+
+Then open [http://127.0.0.1:8000/L00_ModuleIntro.slides.html](http://127.0.0.1:8000/L00_ModuleIntro.slides.html) in your browser. For another slide deck, replace `L00_ModuleIntro.slides.html` in the address with `<Lxx_notebook_name>.slides.html`.
+
+This serves the existing HTML file as saved; it does not regenerate the slides or change their layout.
+
+For either workflow, keep the terminal running while presenting and press **Ctrl+C** to stop the server. Stop an existing server before starting another on port 8000.
 
 ## Troubleshooting
 
